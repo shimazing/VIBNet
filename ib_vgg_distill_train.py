@@ -145,20 +145,29 @@ def main():
         #print("Teacher model performance")
         #validate(val_loader, teacher_model,criterion, 0, None)
         #"""
-        for i in range(13):
+        n = 13 if 'G5' not in args.cfg else 16
+        for i in range(n):
             for j in range(6):
-                model.state_dict()[ib_keys[i*9+j]].copy_(state_dict['state_dict'][ib_keys[i*9+j]])
+                model.state_dict()[ib_keys[i*10+j]].copy_(state_dict['state_dict'][vgg_keys[i*9+j]])
                 if args.distill_ratio > 0:
-                    teacher_model.state_dict()[ib_keys[i*9+j]].copy_(state_dict['state_dict'][ib_keys[i*9+j]])
-        ib_offset, vgg_offset = 9*13, 6*13
+                    teacher_model.state_dict()[ib_keys[i*10+j]].copy_(state_dict['state_dict'][vgg_keys[i*9+j]])
+        ib_offset, vgg_offset = 10*n, 9*n
+        print(ib_keys[ib_offset:])
+        print(vgg_keys[vgg_offset:])
+        for ib_key, vgg_key in zip(ib_keys[ib_offset:], vgg_keys[vgg_offset:]):
+            model.state_dict()[ib_key].copy_(state_dict['state_dict'][vgg_key])
+            if args.distill_ratio > 0:
+                teacher_model.state_dict()[ib_key].copy_(state_dict['state_dict'][vgg_key])
+        '''
         for i in range(2):
             for j in range(2):
                 print(i, j)
-                model.state_dict()[ib_keys[ib_offset + i*5 + j]].copy_(state_dict['state_dict'][vgg_keys[ib_offset + i*5 + j]])
+                model.state_dict()[ib_keys[ib_offset + i*5 +
+                    j]].copy_(state_dict['state_dict'][vgg_keys[vgg_offset + i*2 + j]])
                 if args.distill_ratio > 0:
                     teacher_model.state_dict()[ib_keys[ib_offset + i*5 +
-                        j]].copy_(state_dict['state_dict'][vgg_keys[ib_offset +
-                            i*5 + j]])
+                        j]].copy_(state_dict['state_dict'][vgg_keys[vgg_offset +
+                            i*2 + j]])'''
         if args.distill_ratio > 0:
             print("Teacher model performance")
             validate(val_loader, teacher_model,criterion, 0, None)
