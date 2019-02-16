@@ -6,6 +6,7 @@ import multiprocessing
 from multiprocessing import Pool
 import argparse
 import subprocess
+from itertools import product
 
 manager = multiprocessing.Manager()
 GPUqueue = manager.Queue()
@@ -17,6 +18,7 @@ for i in range(4):
 def launch_experiment(args):
     args = [str(arg) for arg in args]
     subprocess.run(args=['python3', 'ib_vgg_distill_train.py', '--batch-norm',
+        '--data-set', 'cifar10',
         '--resume-vgg-pt', 'baseline/cifar10/checkpoint_299_nocrop.tar',
         '--ban-crop',
         '--opt', 'adam',
@@ -25,7 +27,7 @@ def launch_experiment(args):
         '--lr', '1.4e-3',
         '--weight-decay', '5e-5',
         '--kl-fac', '1.4e-5',
-        '--save_dir', 'ib_vgg_distill/D4'
+        '--save-dir', 'ib_vgg_distill/D4',
         '--distill_ratio', args[0],
         '--T', args[1],
         '--rand_seed', args[2]])
@@ -43,8 +45,10 @@ def main():
     rand_seed_list = range(5)
     T_list = [0.5, 1, 2, 4]
     distill_ratio_list = [0, 0.2, 0.5, 0.7, 1]
-    args_list = product(distill_ratio_list, T_list, rand_seed_list)
+    args_list = list(product(distill_ratio_list, T_list, rand_seed_list))
     print("# total training samples={}".format(len(args_list)))
     pool = Pool(processes=n_process,initializer=distribute_gpu,
             initargs=(GPUqueue,), maxtasksperchild=1)
     pool.map(launch_experiment, args_list)
+
+main()
