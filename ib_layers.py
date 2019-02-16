@@ -57,21 +57,33 @@ class InformationBottleneck(Module):
         return new_shape
 
     def get_logalpha(self):
-        return self.post_z_logD.data - torch.log(self.post_z_mu.data.pow(2) + self.epsilon)
+        return self.post_z_logD.data - torch.log(self.post_z_mu.data.pow(2) +
+            self.epsilon)
 
-    def get_dp(self):
-        logalpha = self.get_logalpha()
-        alpha = torch.exp(logalpha)
-        return alpha / (1+alpha)
+
+    def get_log_one_plus_alpha(self):
+        h_D = torch.exp(self.post_z_logD)
+        h_mu = self.post_z_mu
+        return torch.log(1 + h_mu.pow(2)/(h_D + self.epsilon)).data
+
+    #def get_dp(self):
+    #    logalpha = self.get_logalpha()
+    #    alpha = torch.exp(logalpha)
+    #    return alpha / (1+alpha)
 
     def get_mask_hard(self, threshold=0):
         logalpha = self.get_logalpha()
-        hard_mask = (logalpha < threshold).float()
+        #print(self.post_z_logD.data.exp(), "var")
+        #print(self.post_z_mu.data, "mu")
+        #print(logalpha)
+        #hard_mask = (logalpha < threshold).float()
+        hard_mask = (self.get_log_one_plus_alpha() > threshold).float()
         return hard_mask
 
     def get_mask_weighted(self, threshold=0):
         logalpha = self.get_logalpha()
-        mask = (logalpha < threshold).float()*self.post_z_mu.data
+        #mask = (logalpha < threshold).float()*self.post_z_mu.data
+        mask = (self.get_log_one_plus_alpha() > threshold).float()*self.post_z_mu.data
         return mask
 
     def forward(self, x):
@@ -90,7 +102,7 @@ class InformationBottleneck(Module):
             z_scale = Variable(self.get_mask_weighted(self.mask_thresh))
         self.kld = self.kl_closed_form(x)
         new_shape = self.adapt_shape(z_scale.size(), x.size())
-        return x * z_scale.view(new_shape)  
+        return x * z_scale.view(new_shape)
 
     def kl_closed_form(self, x):
         new_shape = self.adapt_shape(self.post_z_mu.size(), x.size())

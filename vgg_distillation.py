@@ -51,11 +51,16 @@ def main():
         batch_size=args.batchsize, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
-    model = VGG_IB(config=args.cfg, mag=args.mag, batch_norm=args.batch_norm,
+    model = VGG_IB(config=args.cfg + '_compressed', mag=args.mag, batch_norm=args.batch_norm,
                     threshold=args.threshold, init_var=args.init_var,
                     sample_in_training=args.sample_train, sample_in_testing=args.sample_test,
                     n_cls=n_cls, no_ib=args.no_ib)
+    teacher_model = VGG_IB(config=args.cfg, mag=args.mag, batch_norm=args.batch_norm,
+                    threshold=args.threshold, init_var=args.init_var,
+                    sample_in_training=args.sample_train, sample_in_testing=args.sample_test,
+                    n_cls=n_cls, no_ib=False)
     model.cuda()
+    teacher_model.cuda()
 
     ib_param_list, ib_name_list, cnn_param_list, cnn_name_list = [], [], [], []
     for name, param in model.named_parameters():
@@ -93,49 +98,18 @@ def main():
         start_epoch = state_dict['epoch']
         print('loaded checkpoint {} at epoch {} with acc {}'.format(args.resume, state_dict['epoch'], state_dict['prec1']))
 
-    if args.resume_vgg_pt:
-        # VGG model trained without IB params
-        state_dict = torch.load(args.resume_vgg_pt, map_location='cpu')
-        try:
-            print('loaded pretraind model with acc {}'.format(state_dict['best_prec1']))
-        except:
-            pass
-        # match the state dicts
-        ib_keys, vgg_keys = model.state_dict().keys(), state_dict['state_dict'].keys()
-        for key in vgg_keys:
-            #print(key)
-            #print(model.state_dict()[key].shape,
-            #        state_dict['state_dict'][key].shape)
-            model.state_dict()[key].copy_(state_dict['state_dict'][key])
-        #for i in range(13):
-        #    for j in range(6):
-        #        model.state_dict()[ib_keys[i*9+j]].copy_(state_dict['state_dict'][vgg_keys[i*6+j]])
-        #ib_offset, vgg_offset = 9*13, 6*13
-        #for i in range(3):
-        #    for j in range(2):
-        #        model.state_dict()[ib_keys[ib_offset + i*5 + j]].copy_(state_dict['state_dict'][vgg_keys[vgg_offset + i*2+j]])
-
     if args.resume_vgg_vib:
         # VGG model trained without IB params
         state_dict = torch.load(args.resume_vgg_vib)
         print('loaded pretraind model with acc {}'.format(state_dict['prec1']))
         # match the state dicts
-        ib_keys, vgg_keys = list(model.state_dict().keys()), list(state_dict['state_dict'].keys())
-
+        vgg_keys = list(state_dict['state_dict'].keys())
         for key in vgg_keys:
-            #print(key)
-            #print(model.state_dict()[key].shape,
-            #        state_dict['state_dict'][key].shape)
-            model.state_dict()[key].copy_(state_dict['state_dict'][key])
-        """
-        for i in range(13):
-            for j in range(6):
-                model.state_dict()[ib_keys[i*9+j]].copy_(state_dict['state_dict'][ib_keys[i*9+j]])
-        ib_offset, vgg_offset = 9*13, 6*13
-        for i in range(2):
-            for j in range(2):
-                model.state_dict()[ib_keys[ib_offset + i*5 + j]].copy_(state_dict['state_dict'][vgg_keys[ib_offset + i*5 + j]])
-        """
+            if 'z_mu' not in key and 'z_logD' not in key:
+                teacher_model.state_dict()[key].copy_(state_dict['state_dict'][key])
+        print("** Resume pretrained model. check performance")
+        validate(val_loader, teacher_model, criterion, 0, None)
+
     if args.val:
         model.eval()
         validate(val_loader, model, criterion, 0, None)
@@ -147,10 +121,9 @@ def main():
         optimizer.param_groups[0]['lr'] = args.ib_lr * (args.lr_fac ** (epoch//args.lr_epoch))
         optimizer.param_groups[1]['lr'] = args.lr * (args.lr_fac ** (epoch//args.lr_epoch))
 
-        train(train_loader, model, criterion, optimizer, epoch, writer)
+        train(train_loader, model, teacher_model, criterion, optimizer, epoch, writer)
         model.eval()
-        if not args.no_ib:
-            model.print_compression_ratio(args.threshold, writer, epoch)
+        #model.print_compression_ratio(args.threshold, writer, epoch)
 
         prune_acc = validate(val_loader, model, criterion, epoch, writer)
         #writer.add_scalar('test_acc', prune_acc, epoch)
@@ -162,22 +135,27 @@ def main():
                 'state_dict': model.state_dict(),
                 'opt_state_dict': optimizer.state_dict(),
                 'prec1': best_acc,
-            }, os.path.join(args.save_dir, 'best_prune_acc.pth'))
+            }, os.path.join(args.save_dir,
+                '{}_{:2f}_{:02d}_best_prune_acc.pth'.format(args.T, args.distill_ratio,
+                    args.rand_seed)))
         torch.save({
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'opt_state_dict': optimizer.state_dict(),
                 'prec1': prune_acc,
-            }, os.path.join(args.save_dir, 'last_epoch.pth'))
+                }, os.path.join(args.save_dir, '{}_{:2f}_{:02d}_last_epoch.pth'.format(args.T,
+                args.distill_ratio, args.rand_seed)))
     print('Best accuracy: {}'.format(best_acc))
 
-def train(train_loader, model, criterion, optimizer, epoch, writer):
+def train(train_loader, model, teacher_model, criterion, optimizer, epoch,
+        writer):
     """
     Run one train epoch
     """
     batch_time = AverageMeter()
     data_time = AverageMeter()
     ce_losses = AverageMeter()
+    distill_losses = AverageMeter()
     losses = AverageMeter()
     kld_meter = AverageMeter()
     top1 = AverageMeter()
@@ -188,11 +166,11 @@ def train(train_loader, model, criterion, optimizer, epoch, writer):
 
     # switch to train mode
     model.train()
+    teacher_model.eval()
 
     end = time.time()
     start_iter = len(train_loader)*epoch
-    kl_fac = args.kl_fac if not args.no_ib else 0
-    print('kl fac:{}'.format((kl_fac)))
+    kl_fac = args.kl_fac if not model.no_ib else 0
     for i, (input_, target) in enumerate(train_loader):
         ite = start_iter + i
 
@@ -205,16 +183,16 @@ def train(train_loader, model, criterion, optimizer, epoch, writer):
 
         # compute output
         compute_start = time.time()
-        if args.no_ib:
+        if model.no_ib:
             output = model(input_var)
         else:
             output, kl_total = model(input_var)
+        soft_target = F.softmax(teacher_model(input_var) / args.T, -1)
+        distill_loss = torch.sum(-soft_target* F.log_softmax(output, -1), -1).mean(dim=-1)
             #writer.add_scalar('train_kld', kl_total.data, ite)
         forward_time.update(time.time() - compute_start)
-
         ce_loss = criterion(output, target_var)
-
-        loss = ce_loss
+        loss = ce_loss * (1 - args.distill_ratio) + distill_loss * args.distill_ratio
         if kl_fac > 0:
             loss = loss + kl_total * kl_fac
 
@@ -230,6 +208,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer):
         prec1 = accuracy(output.data, target)
         losses.update(loss.data.item(), input_.size(0))
         ce_losses.update(ce_loss.data.item(), input_.size(0))
+        distill_losses.update(distill_loss.data.item(), input_.size(0))
         if kl_fac > 0:
             kld_meter.update(kl_total.data.item(), input_.size(0))
         top1.update(prec1.item(), input_.size(0))
@@ -244,12 +223,13 @@ def train(train_loader, model, criterion, optimizer, epoch, writer):
         'KL Time {kl_time.avg:.3f}\t'
         'Backward Time {backward_time.avg:.3f}\t'
         'CE {ce_loss.avg:.4f}\t'
-        'KLD {klds.avg:.4f}\t'
+        'DT {distill.avg:.4f}\t'
         'Loss {loss.avg:.4f}\t'
         'Prec@1 {top1.avg:.3f}'.format(
             epoch, i, len(train_loader), date=time.strftime("%Y-%m-%d %H:%M:%S"), batch_time=batch_time,
             forward_time=forward_time, backward_time=backward_time, kl_time=kl_time,
-            data_time=data_time, loss=losses, ce_loss=ce_losses, klds=kld_meter, top1=top1))
+            data_time=data_time, loss=losses, ce_loss=ce_losses,
+            distill=distill_losses, top1=top1))
     #writer.add_scalar('train_ce_loss', losses.avg, epoch)
 
 
@@ -266,7 +246,7 @@ def validate(val_loader, model, criterion, epoch, writer, masks=None):
 
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
-        target = target.cuda(async=True)
+        target = target.cuda()
         input_var = input.cuda()
         target_var = target
 
@@ -337,11 +317,11 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=300,
                         help='Total number of epochs.')
     parser.add_argument('--batchsize', type=int, default=128)
-    parser.add_argument('--save-dir', type=str, default='ib_vgg_chk',
+    parser.add_argument('--save-dir', type=str, default='distilled_vgg_chk',
                         help='Path to save the checkpoints')
     parser.add_argument('--threshold', type=float, default=0,
                         help='Threshold of alpha. For pruning.')
-    parser.add_argument('--kl-fac', type=float, default=1e-6,
+    parser.add_argument('--kl-fac', type=float, default=0., #1e-6,
                         help='Factor for the KL term.')
     parser.add_argument('--gpu', type=int, default=0,
                         help='Which GPU to use. Single GPU only.')
@@ -369,7 +349,7 @@ if __name__ == '__main__':
                         help='Optimizer. sgd or adam.')
     parser.add_argument('--val', action='store_true', default=False,
                         help='Whether to only evaluate model.')
-    parser.add_argument('--cfg', type=str, default='D6',
+    parser.add_argument('--cfg', type=str, default='G5',
                         help='VGG net config.')
     parser.add_argument('--data-set', type=str, default='cifar100',
                         help='Which data set to use.')
@@ -395,6 +375,10 @@ if __name__ == '__main__':
     parser.add_argument('--print-freq', type=int, default=1000)
     parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--rand_seed', type=int, default=11)
+    parser.add_argument('--T', type=float, default=2,
+            help='soft target temperature')
+    parser.add_argument('--distill_ratio', type=float, default=0.5,
+            help='power of soft target loss and hard target loss')
     args = parser.parse_args()
     print(args)
     os.environ['CUDA_DEVICE_ORDER']="PCI_BUS_ID"

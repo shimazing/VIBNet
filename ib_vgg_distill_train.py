@@ -56,7 +56,14 @@ def main():
                     sample_in_training=args.sample_train, sample_in_testing=args.sample_test,
                     n_cls=n_cls, no_ib=args.no_ib)
     model.cuda()
-
+    if args.distill_ratio > 0:
+        teacher_model = VGG_IB(config=args.cfg, mag=args.mag, batch_norm=args.batch_norm,
+                    threshold=args.threshold, init_var=args.init_var,
+                    sample_in_training=args.sample_train, sample_in_testing=args.sample_test,
+                    n_cls=n_cls, no_ib=args.no_ib)
+        teacher_model.cuda()
+    else:
+        teacher_model = None
     ib_param_list, ib_name_list, cnn_param_list, cnn_name_list = [], [], [], []
     for name, param in model.named_parameters():
         if 'z_mu' in name or 'z_logD' in name:
@@ -101,19 +108,28 @@ def main():
         except:
             pass
         # match the state dicts
-        ib_keys, vgg_keys = model.state_dict().keys(), state_dict['state_dict'].keys()
-        for key in vgg_keys:
+        ib_keys, vgg_keys = list(model.state_dict().keys()), list(state_dict['state_dict'].keys())
+        #for key in vgg_keys:
             #print(key)
             #print(model.state_dict()[key].shape,
             #        state_dict['state_dict'][key].shape)
-            model.state_dict()[key].copy_(state_dict['state_dict'][key])
-        #for i in range(13):
-        #    for j in range(6):
-        #        model.state_dict()[ib_keys[i*9+j]].copy_(state_dict['state_dict'][vgg_keys[i*6+j]])
-        #ib_offset, vgg_offset = 9*13, 6*13
-        #for i in range(3):
-        #    for j in range(2):
-        #        model.state_dict()[ib_keys[ib_offset + i*5 + j]].copy_(state_dict['state_dict'][vgg_keys[vgg_offset + i*2+j]])
+        #    model.state_dict()[key].copy_(state_dict['state_dict'][key])
+        print("IB_KEYS", ib_keys)
+        print("Vgg_KEYS", vgg_keys)
+        for i in range(13):
+            for j in range(6):
+                model.state_dict()[ib_keys[i*10+j]].copy_(state_dict['state_dict'][vgg_keys[i*6+j]])
+                if args.distill_ratio > 0:
+                    teacher_model.state_dict()[ib_keys[i*10+j]].copy_(state_dict['state_dict'][vgg_keys[i*6+j]])
+        ib_offset, vgg_offset = 10*13, 6*13
+        for i in range(3):
+            for j in range(2):
+                model.state_dict()[ib_keys[ib_offset + i*5 + j]].copy_(state_dict['state_dict'][vgg_keys[vgg_offset + i*2+j]])
+                if args.distill_ratio > 0:
+                    teacher_model.state_dict()[ib_keys[ib_offset + i*5 + j]].copy_(state_dict['state_dict'][vgg_keys[vgg_offset + i*2+j]])
+        if args.distill_ratio > 0:
+            print("Teacher model performance")
+            validate(val_loader, teacher_model,criterion, 0, None)
 
     if args.resume_vgg_vib:
         # VGG model trained without IB params
@@ -122,20 +138,31 @@ def main():
         # match the state dicts
         ib_keys, vgg_keys = list(model.state_dict().keys()), list(state_dict['state_dict'].keys())
 
-        for key in vgg_keys:
-            #print(key)
-            #print(model.state_dict()[key].shape,
-            #        state_dict['state_dict'][key].shape)
-            model.state_dict()[key].copy_(state_dict['state_dict'][key])
-        """
+        #for key in vgg_keys:
+        #    model.state_dict()[key].copy_(state_dict['state_dict'][key])
+        #    if args.distill_ratio > 0:
+        #        teacher_model.state_dict()[key].copy_(state_dict['state_dict'][key])
+        #print("Teacher model performance")
+        #validate(val_loader, teacher_model,criterion, 0, None)
+        #"""
         for i in range(13):
             for j in range(6):
                 model.state_dict()[ib_keys[i*9+j]].copy_(state_dict['state_dict'][ib_keys[i*9+j]])
+                if args.distill_ratio > 0:
+                    teacher_model.state_dict()[ib_keys[i*9+j]].copy_(state_dict['state_dict'][ib_keys[i*9+j]])
         ib_offset, vgg_offset = 9*13, 6*13
         for i in range(2):
             for j in range(2):
+                print(i, j)
                 model.state_dict()[ib_keys[ib_offset + i*5 + j]].copy_(state_dict['state_dict'][vgg_keys[ib_offset + i*5 + j]])
-        """
+                if args.distill_ratio > 0:
+                    teacher_model.state_dict()[ib_keys[ib_offset + i*5 +
+                        j]].copy_(state_dict['state_dict'][vgg_keys[ib_offset +
+                            i*5 + j]])
+        if args.distill_ratio > 0:
+            print("Teacher model performance")
+            validate(val_loader, teacher_model,criterion, 0, None)
+        #"""
     if args.val:
         model.eval()
         validate(val_loader, model, criterion, 0, None)
@@ -147,7 +174,8 @@ def main():
         optimizer.param_groups[0]['lr'] = args.ib_lr * (args.lr_fac ** (epoch//args.lr_epoch))
         optimizer.param_groups[1]['lr'] = args.lr * (args.lr_fac ** (epoch//args.lr_epoch))
 
-        train(train_loader, model, criterion, optimizer, epoch, writer)
+        train(train_loader, model, criterion, optimizer, epoch, writer,
+                teacher_model=teacher_model)
         model.eval()
         if not args.no_ib:
             model.print_compression_ratio(args.threshold, writer, epoch)
@@ -162,22 +190,28 @@ def main():
                 'state_dict': model.state_dict(),
                 'opt_state_dict': optimizer.state_dict(),
                 'prec1': best_acc,
-            }, os.path.join(args.save_dir, 'best_prune_acc.pth'))
+            }, os.path.join(args.save_dir,
+                '{}_{:2f}_{:02d}_best_prune_acc.pth'.format(args.T, args.distill_ratio,
+                    args.rand_seed)))
         torch.save({
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
                 'opt_state_dict': optimizer.state_dict(),
                 'prec1': prune_acc,
-            }, os.path.join(args.save_dir, 'last_epoch.pth'))
+                }, os.path.join(args.save_dir, '{}_{:2f}_{:02d}_last_epoch.pth'.format(args.T,
+                args.distill_ratio, args.rand_seed)))
+
     print('Best accuracy: {}'.format(best_acc))
 
-def train(train_loader, model, criterion, optimizer, epoch, writer):
+def train(train_loader, model, criterion, optimizer, epoch, writer,
+        teacher_model=None):
     """
     Run one train epoch
     """
     batch_time = AverageMeter()
     data_time = AverageMeter()
     ce_losses = AverageMeter()
+    distill_losses = AverageMeter()
     losses = AverageMeter()
     kld_meter = AverageMeter()
     top1 = AverageMeter()
@@ -188,6 +222,8 @@ def train(train_loader, model, criterion, optimizer, epoch, writer):
 
     # switch to train mode
     model.train()
+    if teacher_model is not None:
+        teacher_model.eval()
 
     end = time.time()
     start_iter = len(train_loader)*epoch
@@ -213,8 +249,13 @@ def train(train_loader, model, criterion, optimizer, epoch, writer):
         forward_time.update(time.time() - compute_start)
 
         ce_loss = criterion(output, target_var)
-
         loss = ce_loss
+        if args.distill_ratio > 0:
+            assert teacher_model is not None
+            soft_target = F.softmax(teacher_model(input_var) / args.T, -1)
+            distill_loss = torch.sum(-soft_target* F.log_softmax(output, -1), -1).mean(dim=-1)
+            distill_losses.update(distill_loss.data.item(), input_.size(0))
+            loss = loss * (1 - args.distill_ratio) + distill_loss * args.distill_ratio
         if kl_fac > 0:
             loss = loss + kl_total * kl_fac
 
@@ -244,12 +285,14 @@ def train(train_loader, model, criterion, optimizer, epoch, writer):
         'KL Time {kl_time.avg:.3f}\t'
         'Backward Time {backward_time.avg:.3f}\t'
         'CE {ce_loss.avg:.4f}\t'
+        'Distill {distill_loss.avg:.4f}\t'
         'KLD {klds.avg:.4f}\t'
         'Loss {loss.avg:.4f}\t'
         'Prec@1 {top1.avg:.3f}'.format(
             epoch, i, len(train_loader), date=time.strftime("%Y-%m-%d %H:%M:%S"), batch_time=batch_time,
             forward_time=forward_time, backward_time=backward_time, kl_time=kl_time,
-            data_time=data_time, loss=losses, ce_loss=ce_losses, klds=kld_meter, top1=top1))
+            data_time=data_time, loss=losses,
+            ce_loss=ce_losses,distill_loss=distill_losses, klds=kld_meter, top1=top1))
     #writer.add_scalar('train_ce_loss', losses.avg, epoch)
 
 
@@ -266,7 +309,7 @@ def validate(val_loader, model, criterion, epoch, writer, masks=None):
 
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
-        target = target.cuda(async=True)
+        target = target.cuda()
         input_var = input.cuda()
         target_var = target
 
@@ -395,6 +438,8 @@ if __name__ == '__main__':
     parser.add_argument('--print-freq', type=int, default=1000)
     parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--rand_seed', type=int, default=11)
+    parser.add_argument('--T', type=float, default=2.)
+    parser.add_argument('--distill_ratio', type=float, default=0.)
     args = parser.parse_args()
     print(args)
     os.environ['CUDA_DEVICE_ORDER']="PCI_BUS_ID"

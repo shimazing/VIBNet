@@ -6,28 +6,36 @@ from ib_layers import *
 
 # model configuration, (out_channels, kl_multiplier), 'M': Mean pooling, 'A': Average pooling
 cfg = {
-    'D6': [(64, 1.0/32), (64, 1.0/32), 'M', (128, 1.0/16), (128, 1.0/16), 'M', (256, 1.0/8), (256, 1.0/8), (256, 1.0/8), 
+    'D6': [(64, 1.0/32), (64, 1.0/32), 'M', (128, 1.0/16), (128, 1.0/16), 'M', (256, 1.0/8), (256, 1.0/8), (256, 1.0/8),
         'M', (512, 1.0/4), (512, 1.0/4), (512, 1.0/4), 'M', (512, 1.0/2), (512, 1.0/2), (512, 1.0/2), 'M'],
-    'D5': [(64, 1.0/32**2), (64, 1.0/32**2), 'M', (128, 1.0/16**2), (128, 1.0/16**2), 'M', (256, 1.0/8**2), (256, 1.0/8**2), (256, 1.0/8**2), 
+    'D5': [(64, 1.0/32**2), (64, 1.0/32**2), 'M', (128, 1.0/16**2), (128, 1.0/16**2), 'M', (256, 1.0/8**2), (256, 1.0/8**2), (256, 1.0/8**2),
         'M', (512, 1.0/4**2), (512, 1.0/4**2), (512, 1.0/4**2), 'M', (512, 1.0/2**2), (512, 1.0/2**2), (512, 1.0/2**2), 'M'],
-    'D4': [(64, 1.0/32), (64, 1.0/32), 'M', (128, 1.0/16), (128, 1.0/16), 'M', (256, 1.0/8), (256, 1.0/8), (256, 1.0/8), 
+    'D4': [(64, 1.0/32), (64, 1.0/32), 'M', (128, 1.0/16), (128, 1.0/16), 'M', (256, 1.0/8), (256, 1.0/8), (256, 1.0/8),
         'M', (512, 1.0/4), (512, 1.0/4), (512, 1.0/4), 'M', (512, 1.0/2), (512, 1.0/2), (512, 1.0/2), 'M'],
-    'D3': [(64, 0.1), (64, 0.1), 'M', (128, 0.5), (128, 0.5), 'M', (256, 1), (256, 1), (256, 1), 
+    'D3': [(64, 0.1), (64, 0.1), 'M', (128, 0.5), (128, 0.5), 'M', (256, 1), (256, 1), (256, 1),
         'M', (512, 1), (512, 1), (512, 1), 'M', (512, 1), (512, 1), (512, 1), 'M'],
-    'D2': [(64, 0.01), (64, 0.01), 'M', (128, 1), (128, 1), 'M', (256, 1), (256, 1), (256, 1), 
+    'D2': [(64, 0.01), (64, 0.01), 'M', (128, 1), (128, 1), 'M', (256, 1), (256, 1), (256, 1),
         'M', (512, 1), (512, 1), (512, 1), 'M', (512, 1), (512, 1), (512, 1), 'M'],
-    'D1': [(64, 0.1), (64, 0.1), 'M', (128, 1), (128, 1), 'M', (256, 1), (256, 1), (256, 1), 
+    'D1': [(64, 0.1), (64, 0.1), 'M', (128, 1), (128, 1), 'M', (256, 1), (256, 1), (256, 1),
         'M', (512, 1), (512, 1), (512, 1), 'M', (512, 1), (512, 1), (512, 1), 'M'],
-    'D0': [(64, 1), (64, 1), 'M', (128, 1), (128, 1), 'M', (256, 1), (256, 1), (256, 1), 
+    'D0': [(64, 1), (64, 1), 'M', (128, 1), (128, 1), 'M', (256, 1), (256, 1), (256, 1),
         'M', (512, 1), (512, 1), (512, 1), 'M', (512, 1), (512, 1), (512, 1), 'M'],
-    'G':[(64, 1.0/32), (64, 1.0/32), 'M', (128, 1.0/16), (128, 1.0/16), 'M', (256, 1.0/8), (256, 1.0/8), (256, 1.0/8), 
+    'G':[(64, 1.0/32), (64, 1.0/32), 'M', (128, 1.0/16), (128, 1.0/16), 'M', (256, 1.0/8), (256, 1.0/8), (256, 1.0/8),
         'M', (512, 1.0/4), (512, 1.0/4), (512, 1.0/4), 'M', (512, 1.0/2), (512, 1.0/2), (512, 1.0/2), 'M'], # VGG 16 with one fewer FC
-    'G5': [(64, 1.0/32), (64, 1.0/32), 'M', (128, 1.0/16), (128, 1.0/16), 'M', (256, 1.0/8), (256, 1.0/8), (256, 1.0/8), (256, 1.0/8),
-        'M', (512, 1.0/4), (512, 1.0/4), (512, 1.0/4), (512, 1.0/4), 'M', (512, 1.0/2), (512, 1.0/2), (512, 1.0/2), (512, 1.0/2), 'A']
+    'G5': [(64, 1.0/32), (64, 1.0/32), 'M',
+        (128, 1.0/16), (128, 1.0/16), 'M',
+        (256, 1.0/8), (256, 1.0/8), (256, 1.0/8), (256, 1.0/8),'M',
+        (512, 1.0/4), (512, 1.0/4), (512, 1.0/4), (512, 1.0/4), 'M',
+        (512, 1.0/2), (512, 1.0/2), (512, 1.0/2), (512, 1.0/2), 'A'], # VGG 19
+    'G5_compressed': [(21, 0), (42, 0), 'M',
+        (86, 0), (125, 0),'M',
+        (251, 0), (250, 0), (249, 0), (219, 0), 'M',
+        (204, 0), (54, 0), (25, 0), (24, 0), 'M',
+        (17, 0),  (21, 0), (44, 0), (157, 0), 'A']
 }
 
 class VGG_IB(nn.Module):
-    def __init__(self, config=None, mag=9, batch_norm=False, threshold=0, 
+    def __init__(self, config=None, mag=9, batch_norm=False, threshold=0,
                 init_var=0.01, sample_in_training=True, sample_in_testing=False, n_cls=10, no_ib=False):
         super(VGG_IB, self).__init__()
 
@@ -37,23 +45,25 @@ class VGG_IB(nn.Module):
         self.init_var = init_var
         self.sample_in_training = sample_in_training
         self.sample_in_testing = sample_in_testing
-        self.no_ib = no_ib
-
+        self.no_ib = no_ib or ('compressed' in self.config)
         self.conv_layers, conv_kl_list = self.make_conv_layers(cfg[config], batch_norm)
         print('Using structure {}'.format(cfg[config]))
 
-        fc_ib1 = InformationBottleneck(512, mask_thresh=threshold, init_mag=self.init_mag, init_var=self.init_var, 
+        fc_ib1 = InformationBottleneck(512, mask_thresh=threshold, init_mag=self.init_mag, init_var=self.init_var,
                     sample_in_training=sample_in_training, sample_in_testing=sample_in_testing)
-        fc_ib2 = InformationBottleneck(512, mask_thresh=threshold, init_mag=self.init_mag, init_var=self.init_var, 
+        fc_ib2 = InformationBottleneck(512, mask_thresh=threshold, init_mag=self.init_mag, init_var=self.init_var,
                     sample_in_training=sample_in_training, sample_in_testing=sample_in_testing)
         self.n_cls = n_cls
         if self.config in ['G', 'D6']:
             fc_layer_list = [nn.Linear(512, 512), nn.ReLU(), nn.Linear(512, self.n_cls)] if no_ib else \
-                            [nn.Linear(512, 512), nn.ReLU(), fc_ib1, nn.Linear(512, self.n_cls)] 
+                            [nn.Linear(512, 512), nn.ReLU(), fc_ib1, nn.Linear(512, self.n_cls)]
             self.fc_layers = nn.Sequential(*fc_layer_list)
             self.kl_list = conv_kl_list + [fc_ib1]
-        elif self.config == 'G5':
-            self.fc_layers = nn.Sequential(nn.Linear(512, self.n_cls))
+        elif 'G5' in self.config:
+            if 'compressed' in self.config:
+                self.fc_layers = nn.Sequential(nn.Linear(157, self.n_cls))
+            else:
+                self.fc_layers = nn.Sequential(nn.Linear(512, self.n_cls))
             self.kl_list = conv_kl_list
         else:
             fc_layer_list = [nn.Linear(512, 512), nn.ReLU(), nn.Linear(512, 512), nn.ReLU(), nn.Linear(512, self.n_cls)] if no_ib else \
@@ -72,7 +82,7 @@ class VGG_IB(nn.Module):
             else:
                 conv2d = nn.Conv2d(in_channels, v[0], kernel_size=3, padding=1)
                 in_channels = v[0]
-                ib = InformationBottleneck(v[0], mask_thresh=self.threshold, init_mag=self.init_mag, init_var=self.init_var, 
+                ib = InformationBottleneck(v[0], mask_thresh=self.threshold, init_mag=self.init_mag, init_var=self.init_var,
                     kl_mult=v[1], sample_in_training=self.sample_in_training, sample_in_testing=self.sample_in_testing)
                 if batch_norm:
                     layers += [conv2d, nn.BatchNorm2d(v[0]), nn.ReLU(inplace=True)]
@@ -92,7 +102,7 @@ class VGG_IB(nn.Module):
             ib_kld = self.kl_list[0].kld
             for ib in self.kl_list[1:]:
                 ib_kld += ib.kld
-            
+
             return x, ib_kld
         else:
             return x
@@ -109,6 +119,8 @@ class VGG_IB(nn.Module):
     def print_compression_ratio(self, threshold, writer=None, epoch=-1):
         # applicable for structures with global pooling before fc
         _, prune_stat = self.get_masks(hard_mask=True, threshold=threshold)
+        weighted_masks = self.get_masks(hard_mask=False, threshold=threshold)
+
         conv_shapes = [v[0] for v in cfg[self.config] if type(v) is not str]
 
         if self.config in ['G', 'D6']:
@@ -119,6 +131,7 @@ class VGG_IB(nn.Module):
             fc_shapes = [512, 512]
 
         net_shape = [ out_channels-prune_stat[idx] for idx, out_channels in enumerate(conv_shapes+fc_shapes)]
+        net_shape_ =  [mask.mean(dim=0).data.item() for mask in weighted_masks]
         #conv_shape_with_pool = [v[0] if v != 'M' else 'M' for v in cfg[self.config]]
         current_n, hdim, last_channels, flops, fmap_size = 0, 64, 3, 0, 32
         for n, pruned_channels in enumerate(prune_stat):
@@ -163,7 +176,8 @@ class VGG_IB(nn.Module):
         pruned_params += in_pruned * self.n_cls
 
         print('total parameters: {}, pruned parameters: {}, remaining params:{}, remain/total params:{}, remaining flops: {}, '
-              'each layer pruned: {},  remaining structure:{}'.format(total_params, pruned_params, remain_params, 
+              'each layer pruned: {},  remaining structure:{}'.format(total_params, pruned_params, remain_params,
                     float(total_params-pruned_params)/total_params, flops, prune_stat, net_shape))
+        print('weighted_mask', net_shape_)
         if writer is not None:
             writer.add_scalar('flops', flops, epoch)
