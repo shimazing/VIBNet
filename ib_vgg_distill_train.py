@@ -386,8 +386,8 @@ if __name__ == '__main__':
                         help='Threshold of alpha. For pruning.')
     parser.add_argument('--kl-fac', type=float, default=1e-6,
                         help='Factor for the KL term.')
-    parser.add_argument('--gpu', type=int, default=0,
-                        help='Which GPU to use. Single GPU only.')
+    #parser.add_argument('--gpu', type=int, default=0,
+    #                    help='Which GPU to use. Single GPU only.')
     parser.add_argument('--lr', type=float, default=0.1,
                         help='Learning rate.')
     parser.add_argument('--weight-decay', '-wd', default=1e-4, type=float,
@@ -443,5 +443,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     print(args)
     os.environ['CUDA_DEVICE_ORDER']="PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu)
+    #os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu)
     main()
